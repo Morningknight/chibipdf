@@ -61,7 +61,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
-
+  flutter_native_splash:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -104,3 +104,22 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_native_splash:
+  # The background color for your splash screen.
+  # It's good to match this with your app's main background color.
+  color: "#F3E5F5" # This is a light purple, similar to Colors.deepPurple[50]
+
+  # The background color for your splash screen in dark mode.
+  color_dark: "#212121" # A common dark theme background color
+
+  # The path to your splash screen logo.
+  image: assets/splash_logo.png
+
+  # You can also specify a separate logo for dark mode if you want.
+  # image_dark: assets/splash_logo_dark.png
+
+  # Configuration for Android 12+'s new splash screen behavior.
+  android_12:
+    image: assets/splash_logo.png
+    color: "#F3E5F5"
+    color_dark: "#212121"

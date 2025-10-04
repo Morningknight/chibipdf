@@ -3,14 +3,12 @@
 import 'dart:io';
 import 'package:chibipdf/screens/pdf_viewer_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class ImageToPdfScreen extends StatefulWidget {
-  // We accept a function to update the recents list on the home screen
   final Function(String) onPdfCreated;
 
   const ImageToPdfScreen({super.key, required this.onPdfCreated});
@@ -24,7 +22,6 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
   List<File> _selectedImages = [];
   bool _isCreatingPdf = false;
 
-  // --- LOGIC: Select images from gallery ---
   Future<void> _selectImages() async {
     final List<XFile> pickedFiles = await _picker.pickMultiImage();
     if (pickedFiles.isNotEmpty) {
@@ -34,7 +31,6 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
     }
   }
 
-  // --- LOGIC: Create and save the PDF ---
   Future<void> _createPdf() async {
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -43,9 +39,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
       return;
     }
 
-    setState(() {
-      _isCreatingPdf = true; // Show loading indicator
-    });
+    setState(() { _isCreatingPdf = true; });
 
     try {
       final pdf = pw.Document();
@@ -61,38 +55,33 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
         );
       }
 
-      // Get a path to save the file
       final outputDir = await getApplicationDocumentsDirectory();
       final fileName = 'ChibiPDF_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('${outputDir.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
-      // --- Success ---
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF created successfully at ${file.path}')),
-      );
-
-      // Call the callback to update recents on the home screen
-      widget.onPdfCreated(file.path);
-
-      // Open the newly created PDF
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PdfViewerScreen(file: file),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF created successfully at ${file.path}')),
+        );
+        widget.onPdfCreated(file.path);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfViewerScreen(file: file),
+          ),
+        );
+      }
 
     } catch (e) {
-      // --- Error ---
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create PDF: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create PDF: $e')),
+        );
+      }
     } finally {
       if (mounted) {
-        setState(() {
-          _isCreatingPdf = false; // Hide loading indicator
-        });
+        setState(() { _isCreatingPdf = false; });
       }
     }
   }
@@ -113,8 +102,8 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
                 style: TextStyle(color: Colors.grey[600]),
               ),
             )
-                : // Use ReorderableListView to allow users to change image order
-            ReorderableListView.builder(
+            // ============== THIS IS THE REORDERING FEATURE ==============
+                : ReorderableListView.builder(
               padding: const EdgeInsets.all(16.0),
               itemCount: _selectedImages.length,
               itemBuilder: (context, index) {
@@ -125,7 +114,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
                   child: ListTile(
                     leading: Image.file(image, width: 50, height: 50, fit: BoxFit.cover),
                     title: Text('Image ${index + 1}'),
-                    subtitle: Text(image.path.split('/').last),
+                    subtitle: Text(image.path.split(Platform.pathSeparator).last, overflow: TextOverflow.ellipsis),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () {
@@ -147,8 +136,8 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
                 });
               },
             ),
+            // ==============================================================
           ),
-          // --- BOTTOM ACTION BAR ---
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
