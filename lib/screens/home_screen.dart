@@ -1,6 +1,7 @@
 // lib/screens/home_screen.dart
 
-import 'dart:io';
+import 'dart:io'; // <--- THIS WAS THE MISSING LINE
+import 'package:chibipdf/screens/image_to_pdf_screen.dart';
 import 'package:chibipdf/screens/pdf_viewer_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +52,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getFileName(String path) {
-    return path.split('/').last;
+    // This now works because the 'Platform' class is available from 'dart:io'
+    return path.substring(path.lastIndexOf(Platform.pathSeparator) + 1);
   }
 
   // --- LOGIC for picking files ---
@@ -66,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final String? filePath = result.files.first.path;
       if (filePath == null) return;
 
+      // This now works because the 'File' class is available
       await _openPdf(File(filePath));
     } catch (e) {
       debugPrint("Error picking file: $e");
@@ -73,6 +76,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openPdf(File file) async {
+    if (!await file.exists()) {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: File not found at ${file.path}')),
+        );
+      }
+      return;
+    }
     await _addAndSaveRecent(file.path);
     if (mounted) {
       Navigator.push(
@@ -86,7 +97,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // We define the tools list here, inside the build method
     final List<_ToolCard> tools = [
       _ToolCard(
         title: 'View PDF',
@@ -99,8 +109,15 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: Icons.add_photo_alternate_rounded,
         color: Colors.orange,
         action: (context) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Coming soon!')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ImageToPdfScreen(
+                onPdfCreated: (path) {
+                  _addAndSaveRecent(path);
+                },
+              ),
+            ),
           );
         },
       ),
@@ -248,7 +265,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ============== THIS SECTION WAS MISSING ==============
   Widget _buildToolCard(BuildContext context, _ToolCard tool) {
     return Card(
       elevation: 2,
@@ -291,4 +307,3 @@ class _ToolCard {
     required this.action,
   });
 }
-// ======================================================
