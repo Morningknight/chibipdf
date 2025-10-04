@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:chibipdf/screens/pdf_viewer_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-// This import is correct, but the code using it was wrong.
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'about_screen.dart';
 
@@ -18,73 +18,114 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- DATA FOR OUR TOOLS ---
-  final List<_ToolCard> _tools = [
-    _ToolCard(
-      title: 'View PDF',
-      icon: Icons.picture_as_pdf_rounded,
-      color: Colors.deepPurple,
-      action: (context) => _pickAndOpenFile(context),
-    ),
-    _ToolCard(
-      title: 'Create from Images',
-      icon: Icons.add_photo_alternate_rounded,
-      color: Colors.orange,
-      action: (context) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Coming soon!')),
-        );
-      },
-    ),
-    _ToolCard(
-      title: 'Merge PDFs',
-      icon: Icons.merge_type_rounded,
-      color: Colors.teal,
-      action: (context) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Coming soon!')),
-        );
-      },
-    ),
-    _ToolCard(
-      title: 'Convert PDF',
-      icon: Icons.transform_rounded,
-      color: Colors.pink,
-      action: (context) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Coming soon!')),
-        );
-      },
-    ),
-  ];
+  // --- STATE for Recents ---
+  List<String> _recentFiles = [];
+  static const String _recentsKey = 'recent_files';
 
-  // --- LOGIC ---
-  static Future<void> _pickAndOpenFile(BuildContext context) async {
+  @override
+  void initState() {
+    super.initState();
+    _loadRecents();
+  }
+
+  // --- LOGIC for loading and saving recents ---
+  Future<void> _loadRecents() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _recentFiles = prefs.getStringList(_recentsKey) ?? [];
+    });
+  }
+
+  Future<void> _addAndSaveRecent(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> updatedRecents = List.from(_recentFiles);
+    updatedRecents.remove(path);
+    updatedRecents.insert(0, path);
+    if (updatedRecents.length > 20) {
+      updatedRecents = updatedRecents.sublist(0, 20);
+    }
+    await prefs.setStringList(_recentsKey, updatedRecents);
+    setState(() {
+      _recentFiles = updatedRecents;
+    });
+  }
+
+  String _getFileName(String path) {
+    return path.split('/').last;
+  }
+
+  // --- LOGIC for picking files ---
+  Future<void> _pickAndOpenFile(BuildContext context) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
       );
 
-      if (result == null || result.files.single.path == null) return;
-      final file = File(result.files.single.path!);
+      if (result == null || result.files.isEmpty) return;
+      final String? filePath = result.files.first.path;
+      if (filePath == null) return;
 
-      if (context.mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PdfViewerScreen(file: file),
-          ),
-        );
-      }
+      await _openPdf(File(filePath));
     } catch (e) {
       debugPrint("Error picking file: $e");
     }
   }
 
-  // --- UI BUILD METHOD ---
+  Future<void> _openPdf(File file) async {
+    await _addAndSaveRecent(file.path);
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PdfViewerScreen(file: file),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // We define the tools list here, inside the build method
+    final List<_ToolCard> tools = [
+      _ToolCard(
+        title: 'View PDF',
+        icon: Icons.picture_as_pdf_rounded,
+        color: Colors.deepPurple,
+        action: (ctx) => _pickAndOpenFile(ctx),
+      ),
+      _ToolCard(
+        title: 'Create from Images',
+        icon: Icons.add_photo_alternate_rounded,
+        color: Colors.orange,
+        action: (context) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Coming soon!')),
+          );
+        },
+      ),
+      _ToolCard(
+        title: 'Merge PDFs',
+        icon: Icons.merge_type_rounded,
+        color: Colors.teal,
+        action: (context) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Coming soon!')),
+          );
+        },
+      ),
+      _ToolCard(
+        title: 'Convert PDF',
+        icon: Icons.transform_rounded,
+        color: Colors.pink,
+        action: (context) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Coming soon!')),
+          );
+        },
+      ),
+    ];
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -100,13 +141,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 'ChibiPDF',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               ),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.deepPurple.shade200, Colors.deepPurple.shade50],
+                    colors: [
+                      Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                      Theme.of(context).scaffoldBackgroundColor,
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -125,7 +169,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
@@ -138,28 +181,74 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
-          // The grid of tool buttons
           SliverPadding(
             padding: const EdgeInsets.all(16.0),
-            // ================== THIS IS THE CORRECTED SECTION ==================
             sliver: SliverMasonryGrid.count(
-              crossAxisCount: 2, // Two columns
-              childCount: _tools.length,
+              crossAxisCount: 2,
+              childCount: tools.length,
               itemBuilder: (context, index) {
-                final tool = _tools[index];
+                final tool = tools[index];
                 return _buildToolCard(context, tool);
               },
               mainAxisSpacing: 16.0,
               crossAxisSpacing: 16.0,
             ),
-            // ===================================================================
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+              child: Text(
+                "Recently Opened",
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          _recentFiles.isEmpty
+              ? SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(
+                  "Opened PDFs will appear here.",
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              ),
+            ),
+          )
+              : SliverList(
+            delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                final filePath = _recentFiles[index];
+                final file = File(filePath);
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: ListTile(
+                    leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                    title: Text(
+                      _getFileName(filePath),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      filePath,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => _openPdf(file),
+                  ),
+                );
+              },
+              childCount: _recentFiles.length,
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ============== THIS SECTION WAS MISSING ==============
   Widget _buildToolCard(BuildContext context, _ToolCard tool) {
     return Card(
       elevation: 2,
@@ -202,3 +291,4 @@ class _ToolCard {
     required this.action,
   });
 }
+// ======================================================

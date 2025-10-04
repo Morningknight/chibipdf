@@ -1,11 +1,19 @@
 // lib/main.dart
 
 import 'package:chibipdf/screens/home_screen.dart';
+import 'package:chibipdf/theme_notifier.dart'; // Import our new notifier
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart'; // Import provider
 
 void main() {
-  runApp(const ChibiPdfApp());
+  // Wrap the entire app in our ThemeNotifier provider
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeNotifier(),
+      child: const ChibiPdfApp(),
+    ),
+  );
 }
 
 class ChibiPdfApp extends StatelessWidget {
@@ -13,20 +21,37 @@ class ChibiPdfApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChibiPDF',
-      // We are updating the theme to be more modern and use our new font
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-        // Set the default font for the entire app
-        textTheme: GoogleFonts.poppinsTextTheme(
-          Theme.of(context).textTheme,
-        ),
-      ),
-      debugShowCheckedModeBanner: false,
-      // The app now starts directly at our new HomeScreen
-      home: const HomeScreen(),
+    // Use a Consumer widget to listen to theme changes
+    return Consumer<ThemeNotifier>(
+      builder: (context, themeNotifier, child) {
+        return MaterialApp(
+          title: 'ChibiPDF',
+          // Define our light theme
+          theme: ThemeData(
+            brightness: Brightness.light,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurple,
+              brightness: Brightness.light,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.light().textTheme),
+          ),
+          // Define our dark theme
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurple,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+          ),
+          // Set the theme mode based on the notifier's state
+          themeMode: themeNotifier.themeMode,
+          debugShowCheckedModeBanner: false,
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
