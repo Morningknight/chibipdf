@@ -2,17 +2,20 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
-// A helper class to hold page data
-class PageData {
-  final PdfPage page;
-  final int originalIndex;
+enum PageType { existing, newImage }
 
-  PageData(this.page, this.originalIndex);
+class EditablePage {
+  final PageType type;
+  final dynamic data;
+  final int id;
+
+  EditablePage({required this.type, required this.data, required this.id});
 }
 
 class ManagePagesScreen extends StatefulWidget {
@@ -25,9 +28,10 @@ class ManagePagesScreen extends StatefulWidget {
 
 class _ManagePagesScreenState extends State<ManagePagesScreen> {
   PdfDocument? _document;
-  List<PageData> _pages = [];
+  List<EditablePage> _pages = [];
   bool _isLoading = true;
   bool _isSaving = false;
+  int _nextId = 0;
 
   @override
   void initState() {
@@ -38,10 +42,13 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
   Future<void> _loadDocument() async {
     try {
       final doc = await PdfDocument.openFile(widget.filePath);
-      final pageList = <PageData>[];
+      final pageList = <EditablePage>[];
       for (int i = 0; i < doc.pages.length; i++) {
-        final page = doc.pages[i];
-        pageList.add(PageData(page, i));
+        pageList.add(EditablePage(
+          type: PageType.existing,
+          data: doc.pages[i],
+          id: _nextId++,
+        ));
       }
       setState(() {
         _document = doc;
@@ -59,6 +66,24 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
     }
   }
 
+  Future<void> _addPagesFromImages() async {
+    final picker = ImagePicker();
+    final List<XFile> pickedFiles = await picker.pickMultiImage();
+    if (pickedFiles.isNotEmpty) {
+      final newPages = pickedFiles.map((file) {
+        return EditablePage(
+          type: PageType.newImage,
+          data: File(file.path),
+          id: _nextId++,
+        );
+      }).toList();
+      setState(() {
+        _pages.addAll(newPages);
+      });
+    }
+  }
+
+  // =========== THIS IS THE CORRECTED FUNCTION ===========
   Future<void> _savePdf() async {
     if (_pages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -72,15 +97,32 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
     try {
       final newPdf = pw.Document();
 
-      for (final pageData in _pages) {
-        final pageImage = await pageData.page.render();
-        if (pageImage == null) continue;
-        final imageProvider = pw.MemoryImage(pageImage.pixels);
+      for (final page in _pages) {
+        // We create a generic 'pageWidget' to hold the final image.
+        pw.Widget pageWidget;
+
+        if (page.type == PageType.existing) {
+          final pageImage = await (page.data as PdfPage).render();
+          if (pageImage == null) continue;
+
+          // Use pw.RawImage for the uncompressed pixel data
+          pageWidget = pw.Image(
+            pw.RawImage(
+              bytes: pageImage.pixels,
+              width: pageImage.width,
+              height: pageImage.height,
+            ),
+          );
+        } else {
+          // Use pw.MemoryImage for the already-encoded file data
+          final imageProvider = pw.MemoryImage((page.data as File).readAsBytesSync());
+          pageWidget = pw.Image(imageProvider);
+        }
 
         newPdf.addPage(
           pw.Page(
             build: (pw.Context context) {
-              return pw.Center(child: pw.Image(imageProvider));
+              return pw.Center(child: pageWidget);
             },
           ),
         );
@@ -96,6 +138,8 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Saved successfully to $newFileName')),
         );
+        // We pop twice to go back to the home screen, not just the viewer
+        Navigator.of(context).pop();
         Navigator.of(context).pop();
       }
 
@@ -107,11 +151,11 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() { _isSaving = false; });
-      }
+      if (mounted) { setState(() { _isSaving = false; }); }
     }
   }
+  // =======================================================
+
 
   @override
   Widget build(BuildContext context) {
@@ -129,12 +173,17 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addPagesFromImages,
+        label: const Text('Add Pages'),
+        icon: const Icon(Icons.add_photo_alternate),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _document == null
           ? const Center(child: Text('Could not load PDF.'))
           : ReorderableGridView.builder(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 80.0),
         itemCount: _pages.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
@@ -143,28 +192,20 @@ class _ManagePagesScreenState extends State<ManagePagesScreen> {
           childAspectRatio: 2 / 3,
         ),
         itemBuilder: (context, index) {
-          final pageData = _pages[index];
+          final page = _pages[index];
           return Card(
-            key: ValueKey(pageData.originalIndex),
+            key: ValueKey(page.id),
             elevation: 4,
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // =========== THIS IS THE FINAL, ROBUST FIX ===========
-                FutureBuilder<PdfImage?>(
-                  future: pageData.page.render(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-                      return const Center(child: Icon(Icons.error_outline, color: Colors.red));
-                    }
-                    // Use Flutter's built-in Image.memory to display the rendered page bytes
-                    return Image.memory(snapshot.data!.pixels, fit: BoxFit.contain);
-                  },
-                ),
-                // ======================================================
+                if (page.type == PageType.existing)
+                  PdfPageView(
+                    document: _document!,
+                    pageNumber: (page.data as PdfPage).pageNumber,
+                  )
+                else
+                  Image.file(page.data as File, fit: BoxFit.cover),
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(
